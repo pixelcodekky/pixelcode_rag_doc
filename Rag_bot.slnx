@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/RagBot.Domain/RagBot.Domain.csproj" />
+  <Project Path="src/RagBot.Application/RagBot.Application.csproj" />
+  <Project Path="src/RagBot.Infrastructure/RagBot.Infrastructure.csproj" />
+  <Project Path="src/RagBot.WebApi/RagBot.WebApi.csproj" />
+</Solution>

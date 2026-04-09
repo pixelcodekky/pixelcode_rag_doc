@@ -22,6 +22,20 @@ public class ChatController : ControllerBase
         var answer = await _mediator.Send(query);
         return Ok(new { Answer = answer });
     }
+
+    [HttpPost("ask-stream")]
+    public async Task AskStream([FromBody] AskRequest request)
+    {
+        Response.ContentType = "text/plain";
+        var query = new AskQuestionStreamQuery(request.Question);
+        var stream = _mediator.CreateStream(query);
+
+        await foreach (var chunk in stream)
+        {
+            await Response.WriteAsync(chunk);
+            await Response.Body.FlushAsync();
+        }
+    }
 }
 
 public record AskRequest(string Question);

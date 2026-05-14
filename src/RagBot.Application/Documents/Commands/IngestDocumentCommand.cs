@@ -31,7 +31,7 @@ public class IngestDocumentHandler : IRequestHandler<IngestDocumentCommand, List
             {
                 Content = textChunk,
                 SourceMetadata = request.Metadata,
-                Embedding = new Vector(embedding)
+                Embedding = new Vector(embedding) 
             };
 
             await _vectorStore.AddChunkAsync(chunk);
@@ -46,14 +46,69 @@ public class IngestDocumentHandler : IRequestHandler<IngestDocumentCommand, List
         if (string.IsNullOrWhiteSpace(text)) return new List<string>();
 
         var chunks = new List<string>();
-        int position = 0;
+        // Try to split by paragraphs first
+        var paragraphs = text.Split(new[] { "\r\n\r\n", "\n\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var currentChunk = new System.Text.StringBuilder();
 
-        while (position < text.Length)
+        foreach (var paragraph in paragraphs)
         {
-            int length = Math.Min(chunkSize, text.Length - position);
-            chunks.Add(text.Substring(position, length));
-            
-            position += chunkSize - overlap;
+            if (currentChunk.Length + paragraph.Length > chunkSize && currentChunk.Length > 0)
+            {
+                chunks.Add(currentChunk.ToString().Trim());
+                
+                // Add overlap: keep the trailing end of the previous chunk
+                var lastContent = currentChunk.ToString();
+                currentChunk.Clear();
+                
+                if (overlap > 0 && lastContent.Length > overlap)
+                {
+                    var overlapString = lastContent.Substring(lastContent.Length - overlap);
+                    // Avoid cutting words in half if possible
+                    var firstSpace = overlapString.IndexOf(' ');
+                    if (firstSpace >= 0 && firstSpace < overlapString.Length - 1)
+                        overlapString = overlapString.Substring(firstSpace + 1);
+                    currentChunk.Append(overlapString).Append(" ");
+                }
+            }
+
+            // If a single paragraph is too large, split by sentences
+            if (paragraph.Length > chunkSize)
+            {
+                var sentences = paragraph.Split(new[] { ". ", "? ", "! ", ".\n" }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var sentence in sentences)
+                {
+                    // Add back some punctuation as a best guess
+                    var sentenceWithPunctuation = sentence + ". ";
+                    if (currentChunk.Length + sentenceWithPunctuation.Length > chunkSize && currentChunk.Length > 0)
+                    {
+                        chunks.Add(currentChunk.ToString().Trim());
+                        currentChunk.Clear();
+                    }
+                    
+                    if (sentenceWithPunctuation.Length > chunkSize)
+                    {
+                        // Final fallback for giant strings without punctuation
+                        for (int i = 0; i < sentenceWithPunctuation.Length; i += chunkSize)
+                            chunks.Add(sentenceWithPunctuation.Substring(i, Math.Min(chunkSize, sentenceWithPunctuation.Length - i)));
+                    }
+                    else
+                    {
+                        currentChunk.Append(sentenceWithPunctuation);
+                    }
+                }
+            }
+            else
+            {
+                // Paragraph fits in chunk size
+                currentChunk.Append(paragraph).Append("\n\n");
+            }
+        }
+
+        if (currentChunk.Length > 0)
+        {
+            var finalChunk = currentChunk.ToString().Trim();
+            if (!string.IsNullOrEmpty(finalChunk))
+                chunks.Add(finalChunk);
         }
 
         return chunks;
